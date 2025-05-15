@@ -5,7 +5,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 
 # CSV-Datei Pfad
-csv_datei = "C:\\Users\\AKH\\Downloads\\SOLDA_8_Projekt\\data\\Primärverbrauch DE.csv"
+csv_datei = r"C:\Users\bkrings\Documents\Berufsschule\2. Lehrjahr\SODAL 8\GUI-Projekt mit CSV\Ahmed\SOLDA_8_Projekt\data\Primärverbrauch DE.csv"
 
 # Daten global laden
 try:
@@ -16,14 +16,27 @@ except Exception as e:
 
 def update_dropdowns():
     if not df_all.empty:
-        # Erste Spalte als Energieträger
+        # Energieträger aus erster Spalte
         erste_spalte = df_all.columns[0]
         energietraeger_cb['values'] = sorted(df_all[erste_spalte].dropna().unique())
-        # Jahr wie gehabt
-        if 'Jahr' in df_all.columns:
-            jahr_cb['values'] = sorted(df_all['Jahr'].dropna().unique())
+        if energietraeger_cb['values']:
+            energietraeger_cb.current(0)
         else:
-            jahr_cb['values'] = []
+            energietraeger_cb.set('')
+        # Jahre aus den Spaltennamen ab der zweiten Spalte
+        jahre = list(df_all.columns[1:])
+        jahr_cb['values'] = jahre
+        jahr_cb.set('')  # Kein Jahr vorauswählen!
+
+def update_table(dataframe):
+    try:
+        treeview.delete(*treeview.get_children())
+        for i, (_, row) in enumerate(dataframe.iterrows()):
+            values = [row["Jahr"]] + list(row[1:])
+            tag = "even" if i % 2 == 0 else "odd"
+            treeview.insert("", "end", values=values, tags=(tag,))
+    except Exception as e:
+        messagebox.showerror("Fehler beim Aktualisieren der Tabelle", str(e))
 
 def show_csv_data():
     try:
@@ -36,17 +49,17 @@ def show_csv_data():
             return
 
         df = df_all.copy()
-        # Filter Energieträger (erste Spalte)
         erste_spalte = df.columns[0]
+        # Filter Energieträger nur, wenn einer gewählt ist
         if energietraeger_var.get():
             df = df[df[erste_spalte] == energietraeger_var.get()]
-        # Filter Jahr
-        if 'Jahr' in df.columns and jahr_var.get():
-            df = df[df['Jahr'] == jahr_var.get()]
+        # Filter Jahr: Nur die Spalte für das gewählte Jahr anzeigen
+        if jahr_var.get():
+            jahr = jahr_var.get()
+            df = df[[erste_spalte, jahr]]
 
-        # Tabelle leeren
-        for row in treeview.get_children():
-            treeview.delete(row)
+        # Tabelle aktualisieren
+        update_table(df)
 
         # Spalten setzen
         treeview["columns"] = list(df.columns)
@@ -54,17 +67,11 @@ def show_csv_data():
             treeview.heading(col, text=col)
             treeview.column(col, width=120, anchor="center")
 
-        # Daten einfügen
-        for _, row in df.iterrows():
-            treeview.insert("", "end", values=list(row))
-
         # Kreisdiagramm
         for widget in frame_chart.winfo_children():
             widget.destroy()
-        # Pie nur wenn mindestens 2 Spalten und Werte vorhanden
         if len(df) > 0 and len(df.columns) > 1:
             labels = df[erste_spalte]
-            # Nimm die zweite Spalte als Werte
             werte_spalte = df.columns[1]
             values = df[werte_spalte]
             fig, ax = plt.subplots(figsize=(5, 5))
@@ -80,6 +87,24 @@ def show_csv_data():
 root = tk.Tk()
 root.title("CSV-Datenanzeige mit Kreisdiagramm und Filter")
 root.geometry("1200x700")
+
+# Style für die Tabelle
+style = ttk.Style()
+style.configure("Treeview",
+                rowheight=25,
+                font=("Arial", 16),
+                borderwidth=1,
+                relief="solid",
+                background="white",
+                fieldbackground="white")
+style.configure("Treeview.Heading",
+                font=("Arial", 18, "bold"),
+                borderwidth=1,
+                relief="solid")
+style.map("Treeview",
+          background=[("selected", "lightblue")],
+          foreground=[("selected", "black")])
+style.layout("Treeview", [('Treeview.treearea', {'sticky': 'nswe'})])
 
 # Dropdown-Frame
 frame_dropdown = tk.Frame(root)
@@ -116,28 +141,26 @@ def on_land_selected(event):
         jahr_cb['values'] = []
         show_csv_data()
 
-# Event für Filter-Auswahl
-def on_filter_selected(event):
+# Event für Jahr-Auswahl (Tabelle aktualisieren)
+def on_jahr_selected(event):
     show_csv_data()
 
 land_cb.bind("<<ComboboxSelected>>", on_land_selected)
-energietraeger_cb.bind("<<ComboboxSelected>>", on_filter_selected)
-jahr_cb.bind("<<ComboboxSelected>>", on_filter_selected)
+jahr_cb.bind("<<ComboboxSelected>>", on_jahr_selected)
+# Kein Event für energietraeger_cb, damit Tabelle nicht bei Energieträger-Wechsel aktualisiert wird
 
-# Filter-Button
-filter_btn = tk.Button(frame_dropdown, text="Anzeigen", command=show_csv_data)
-filter_btn.pack(side="left", padx=10)
+# Table-Frame
+table_frame = tk.Frame(root, bg="white", bd=1, relief="solid")
+table_frame.pack(padx=10, pady=10)
 
-# Frame für die Tabelle
-frame_table = tk.Frame(root)
-frame_table.pack(side="left", fill="both", expand=True)
+# Tabelle
+treeview = ttk.Treeview(table_frame, show="headings", height=10, style="Treeview")
+treeview.pack(side="left", padx=5, pady=5, fill="both", expand=True)
 
-treeview = ttk.Treeview(frame_table, show="headings")
-treeview.pack(fill="both", expand=True)
-
-scrollbar = ttk.Scrollbar(frame_table, orient="vertical", command=treeview.yview)
-treeview.configure(yscrollcommand=scrollbar.set)
+# Scrollbar hinzufügen
+scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=treeview.yview)
 scrollbar.pack(side="right", fill="y")
+treeview.configure(yscrollcommand=scrollbar.set)
 
 # Frame für das Kreisdiagramm
 frame_chart = tk.Frame(root)
